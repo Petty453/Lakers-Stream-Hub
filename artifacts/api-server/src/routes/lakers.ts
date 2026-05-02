@@ -250,6 +250,42 @@ router.get("/lakers/live", async (req, res): Promise<void> => {
   }
 });
 
+async function fetchPlayerStats(playerId: string): Promise<{
+  ppg: number; rpg: number; apg: number; spg: number; bpg: number;
+  fgPct: number; fg3Pct: number; ftPct: number; gamesPlayed: number; minutesPerGame: number;
+}> {
+  const empty = { ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, fgPct: 0, fg3Pct: 0, ftPct: 0, gamesPlayed: 0, minutesPerGame: 0 };
+  try {
+    const data = await espnFetch(
+      `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/overview`
+    ) as Record<string, unknown>;
+    const statistics = data.statistics as Record<string, unknown> | undefined;
+    if (!statistics) return empty;
+    const names = (statistics.names as string[]) ?? [];
+    const splits = (statistics.splits as Record<string, unknown>[]) ?? [];
+    // Use first split (regular season averages)
+    const statsArr = (splits[0]?.stats as string[]) ?? [];
+    const get = (name: string): number => {
+      const idx = names.indexOf(name);
+      return idx >= 0 ? parseFloat(statsArr[idx] ?? "0") || 0 : 0;
+    };
+    return {
+      ppg: get("avgPoints"),
+      rpg: get("avgRebounds"),
+      apg: get("avgAssists"),
+      spg: get("avgSteals"),
+      bpg: get("avgBlocks"),
+      fgPct: get("fieldGoalPct"),
+      fg3Pct: get("threePointPct"),
+      ftPct: get("freeThrowPct"),
+      gamesPlayed: Math.round(get("gamesPlayed")),
+      minutesPerGame: get("avgMinutes"),
+    };
+  } catch {
+    return empty;
+  }
+}
+
 router.get("/lakers/roster", async (req, res): Promise<void> => {
   try {
     const data = (await espnFetch(
@@ -258,7 +294,12 @@ router.get("/lakers/roster", async (req, res): Promise<void> => {
 
     const athleteList = ((data.athletes as unknown[]) ?? []) as Record<string, unknown>[];
 
-    const players = athleteList.map((athlete) => {
+    // Fetch all player stats in parallel
+    const statsResults = await Promise.all(
+      athleteList.map((a) => fetchPlayerStats((a.id as string) ?? ""))
+    );
+
+    const players = athleteList.map((athlete, i) => {
       const id = (athlete.id as string) ?? "";
       const position = (athlete.position as Record<string, unknown>) ?? {};
       const athleteInjuries = ((athlete.injuries as unknown[]) ?? []) as Record<string, unknown>[];
@@ -288,18 +329,7 @@ router.get("/lakers/roster", async (req, res): Promise<void> => {
           ((athlete.experience as Record<string, unknown>)?.displayValue as string) ??
           "Rookie",
         photoUrl,
-        stats: {
-          ppg: 0,
-          rpg: 0,
-          apg: 0,
-          spg: 0,
-          bpg: 0,
-          fgPct: 0,
-          fg3Pct: 0,
-          ftPct: 0,
-          gamesPlayed: 0,
-          minutesPerGame: 0,
-        },
+        stats: statsResults[i],
         status: playerStatus,
         injuryNote,
       };
