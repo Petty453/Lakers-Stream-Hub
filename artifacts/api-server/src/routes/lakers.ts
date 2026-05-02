@@ -52,10 +52,27 @@ function formatGameTime(dateStr: string): string {
   );
 }
 
+// ESPN returns competitor.score as a plain string like "38", not {value: 38}
+function parseScore(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string") {
+    const n = parseInt(raw, 10);
+    return isNaN(n) ? null : n;
+  }
+  // Fallback for old {value: number} shape
+  if (typeof raw === "object" && raw !== null) {
+    const val = (raw as Record<string, unknown>).value;
+    if (typeof val === "number") return val;
+    if (typeof val === "string") return parseInt(val, 10) || null;
+  }
+  return null;
+}
+
 router.get("/lakers/schedule", async (req, res): Promise<void> => {
   try {
     const data = (await espnFetch(
-      `${ESPN_BASE}/teams/${LAKERS_TEAM_ID}/schedule?limit=100`
+      `${ESPN_BASE}/teams/${LAKERS_TEAM_ID}/schedule?limit=100&seasontype=3`
     )) as Record<string, unknown>;
 
     const events = ((data.events as unknown[]) ?? []) as Record<string, unknown>[];
@@ -76,8 +93,8 @@ router.get("/lakers/schedule", async (req, res): Promise<void> => {
       const lakersComp = lakersIsHome ? home : away;
       const oppComp = lakersIsHome ? away : home;
 
-      const homeScoreVal = (home?.score as Record<string, unknown>)?.value as number | null ?? null;
-      const awayScoreVal = (away?.score as Record<string, unknown>)?.value as number | null ?? null;
+      const homeScoreVal = parseScore(home?.score);
+      const awayScoreVal = parseScore(away?.score);
       const lakersScoreVal = lakersIsHome ? homeScoreVal : awayScoreVal;
       const oppScoreVal = lakersIsHome ? awayScoreVal : homeScoreVal;
 
@@ -167,12 +184,11 @@ router.get("/lakers/live", async (req, res): Promise<void> => {
     const oppComp = lakersIsHome ? away : home;
     const opponentAbbr = ((opponentTeam.abbreviation as string) ?? "").toLowerCase();
 
-    const lakersScore =
-      ((lakersComp?.score as Record<string, unknown>)?.value as number) ?? 0;
-    const opponentScore =
-      ((oppComp?.score as Record<string, unknown>)?.value as number) ?? 0;
+    // Scores come back as plain strings from ESPN, not {value: number}
+    const lakersScore = parseScore(lakersComp?.score) ?? 0;
+    const opponentScore = parseScore(oppComp?.score) ?? 0;
 
-    // Extract game leaders from Lakers competitor
+    // Extract PTS / REB / AST leaders from the Lakers competitor's leaders array
     const leaders: {
       playerId: string;
       name: string;
@@ -183,21 +199,28 @@ router.get("/lakers/live", async (req, res): Promise<void> => {
     }[] = [];
 
     const lakersLeaders = ((lakersComp?.leaders as unknown[]) ?? []) as Record<string, unknown>[];
-    for (const leaderGroup of lakersLeaders) {
-      const leadersList = ((leaderGroup.leaders as unknown[]) ?? []) as Record<string, unknown>[];
+    const wantedCategories = ["points", "rebounds", "assists"] as const;
+    type StatKey = "points" | "rebounds" | "assists";
+
+    for (const catName of wantedCategories) {
+      const cat = lakersLeaders.find(
+        (c) => (c.name as string) === catName
+      ) as Record<string, unknown> | undefined;
+      if (!cat) continue;
+      const leadersList = ((cat.leaders as unknown[]) ?? []) as Record<string, unknown>[];
       const top = leadersList[0];
-      if (top) {
-        const athlete = (top.athlete as Record<string, unknown>) ?? {};
-        const athleteId = (athlete.id as string) ?? "";
-        leaders.push({
-          playerId: athleteId,
-          name: (athlete.displayName as string) ?? "Player",
-          points: Math.round((top.value as number) ?? 0),
-          rebounds: 0,
-          assists: 0,
-          photoUrl: getPlayerPhoto(athleteId),
-        });
-      }
+      if (!top) continue;
+      const athlete = (top.athlete as Record<string, unknown>) ?? {};
+      const athleteId = (athlete.id as string) ?? "";
+      const statValue = Math.round((top.value as number) ?? 0);
+      leaders.push({
+        playerId: athleteId,
+        name: (athlete.displayName as string) ?? "Player",
+        points: catName === "points" ? statValue : 0,
+        rebounds: catName === "rebounds" ? statValue : 0,
+        assists: catName === "assists" ? statValue : 0,
+        photoUrl: (athlete.headshot as string) ?? getPlayerPhoto(athleteId),
+      });
     }
 
     const period = (compStatus.period as number) ?? 1;
@@ -233,7 +256,6 @@ router.get("/lakers/roster", async (req, res): Promise<void> => {
       `${ESPN_BASE}/teams/${LAKERS_TEAM_ID}/roster`
     )) as Record<string, unknown>;
 
-    // athletes is a flat array of player objects
     const athleteList = ((data.athletes as unknown[]) ?? []) as Record<string, unknown>[];
 
     const players = athleteList.map((athlete) => {
@@ -283,7 +305,6 @@ router.get("/lakers/roster", async (req, res): Promise<void> => {
       };
     });
 
-    // Fetch team record
     let teamRecord = "--";
     let teamRank = "--";
     try {
@@ -320,7 +341,6 @@ router.get("/lakers/news", async (req, res): Promise<void> => {
       const images = ((a.images as unknown[]) ?? []) as Record<string, unknown>[];
       const imageUrl = images.length > 0 ? (images[0].url as string) ?? null : null;
 
-      // Navigate the links structure: links.web.href
       const links = (a.links as Record<string, unknown>) ?? {};
       const webLink = (links.web as Record<string, unknown>) ?? {};
       const href = (webLink.href as string) ?? "#";
@@ -413,28 +433,33 @@ router.get("/lakers/standings", async (req, res): Promise<void> => {
     )) as Record<string, unknown>;
 
     const children = ((data.children as unknown[]) ?? []) as Record<string, unknown>[];
-
-    // First child should be Western or Eastern Conference
-    const allEntries: unknown[] = [];
+    const allEntries: {
+      rank: number;
+      teamName: string;
+      teamAbbr: string;
+      wins: number;
+      losses: number;
+      winPct: number;
+      gamesBehind: string;
+      isLakers: boolean;
+      logo: string;
+    }[] = [];
 
     for (const conference of children) {
       const conferenceName = (conference.name as string) ?? "";
-      // Only take Western Conference
       if (!conferenceName.toLowerCase().includes("western")) continue;
 
       const standingsData = (conference.standings as Record<string, unknown>) ?? {};
       const entries = ((standingsData.entries as unknown[]) ?? []) as Record<string, unknown>[];
 
-      entries.forEach((entry, index) => {
+      const parsed = entries.map((entry) => {
         const team = (entry.team as Record<string, unknown>) ?? {};
         const teamId = (team.id as string) ?? "";
         const abbr = ((team.abbreviation as string) ?? "").toLowerCase();
         const stats = ((entry.stats as unknown[]) ?? []) as Record<string, unknown>[];
 
         const getStat = (name: string): string => {
-          const s = stats.find(
-            (st) => st.name === name || st.shortDisplayName === name
-          );
+          const s = stats.find((st) => st.name === name);
           return (s?.displayValue as string) ?? "0";
         };
 
@@ -442,9 +467,10 @@ router.get("/lakers/standings", async (req, res): Promise<void> => {
         const losses = parseInt(getStat("losses"), 10) || 0;
         const winPct = parseFloat(getStat("winPercent")) || 0;
         const gamesBehind = getStat("gamesBehind") || "-";
+        // Use playoff seed for rank if available, otherwise fall back to array index
+        const playoffSeed = parseInt(getStat("playoffSeed"), 10) || 0;
 
-        allEntries.push({
-          rank: index + 1,
+        return {
           teamName: (team.displayName as string) ?? "Team",
           teamAbbr: (team.abbreviation as string) ?? "TM",
           wins,
@@ -455,7 +481,21 @@ router.get("/lakers/standings", async (req, res): Promise<void> => {
           logo: abbr
             ? `https://a.espncdn.com/i/teamlogos/nba/500/${abbr}.png`
             : `https://a.espncdn.com/i/teamlogos/nba/500/${teamId}.png`,
-        });
+          playoffSeed,
+        };
+      });
+
+      // Sort by playoff seed if available, otherwise by win pct descending
+      const sorted = [...parsed].sort((a, b) => {
+        if (a.playoffSeed > 0 && b.playoffSeed > 0) {
+          return a.playoffSeed - b.playoffSeed;
+        }
+        if (b.winPct !== a.winPct) return b.winPct - a.winPct;
+        return b.wins - a.wins;
+      });
+
+      sorted.forEach((entry, index) => {
+        allEntries.push({ ...entry, rank: index + 1 });
       });
     }
 

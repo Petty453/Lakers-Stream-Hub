@@ -80,21 +80,30 @@ export default function HomePage() {
             {live.game.leaders && live.game.leaders.length > 0 && (
               <div className="mt-4 pt-4 border-t border-border">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">Game Leaders</p>
-                <div className="flex flex-wrap gap-3">
-                  {live.game.leaders.map((leader) => (
-                    <div key={leader.playerId} className="flex items-center space-x-2">
-                      <img
-                        src={leader.photoUrl}
-                        alt={leader.name}
-                        className="h-8 w-8 rounded-full object-cover bg-muted"
-                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://a.espncdn.com/i/teamlogos/nba/500/lal.png'; }}
-                      />
-                      <div>
-                        <p className="text-xs font-semibold text-foreground">{leader.name}</p>
-                        <p className="text-xs text-muted-foreground">{leader.points} PTS</p>
+                <div className="flex flex-wrap gap-4">
+                  {live.game.leaders.map((leader, i) => {
+                    const statValue = leader.points > 0
+                      ? `${leader.points} PTS`
+                      : leader.rebounds > 0
+                      ? `${leader.rebounds} REB`
+                      : `${leader.assists} AST`;
+                    const catLabel = leader.points > 0 ? "Points" : leader.rebounds > 0 ? "Rebounds" : "Assists";
+                    return (
+                      <div key={`${leader.playerId}-${catLabel}`} className="flex items-center space-x-2">
+                        <img
+                          src={leader.photoUrl}
+                          alt={leader.name}
+                          className="h-9 w-9 rounded-full object-cover bg-muted border border-border"
+                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://a.espncdn.com/i/teamlogos/nba/500/lal.png'; }}
+                        />
+                        <div>
+                          <p className="text-xs text-muted-foreground">{catLabel}</p>
+                          <p className="text-xs font-semibold text-foreground">{leader.name.split(" ").slice(-1)[0]}</p>
+                          <p className="text-xs text-primary font-bold">{statValue}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -129,7 +138,7 @@ export default function HomePage() {
       )}
 
       {/* Live Stream */}
-      <Card className="border-border bg-card/80 overflow-hidden">
+      <Card className="border-border bg-card/80">
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
@@ -152,16 +161,16 @@ export default function HomePage() {
           </Button>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="relative bg-black" style={{ aspectRatio: "16/9" }}>
+          <div className="relative bg-black rounded-b-xl overflow-hidden" style={{ aspectRatio: "16/9" }}>
             {live?.streamUrl ? (
               <iframe
                 src={live.streamUrl}
                 className="w-full h-full"
-                style={{ aspectRatio: "16/9", minHeight: "360px" }}
-                allow="autoplay; fullscreen"
+                style={{ minHeight: "360px" }}
+                allow="autoplay; fullscreen; picture-in-picture"
+                allowFullScreen
                 title="Lakers Live Stream"
                 data-testid="iframe-live-stream"
-                {...(muted ? { muted: true } : {})}
               />
             ) : (
               <div className="w-full flex items-center justify-center bg-black/80" style={{ aspectRatio: "16/9", minHeight: "360px" }}>
