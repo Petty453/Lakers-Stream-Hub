@@ -5,7 +5,9 @@
  * Lakers Hub API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { InjuryEntry } from "./injuryEntry";
 
-export interface HealthStatus {
-  status: string;
+export interface InjuryResponse {
+  injuries: InjuryEntry[];
+  lastUpdated: string;
 }

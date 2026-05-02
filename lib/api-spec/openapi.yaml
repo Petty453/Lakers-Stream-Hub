@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Lakers Hub API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: lakers
+    description: Lakers data operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,91 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /lakers/schedule:
+    get:
+      operationId: getLakersSchedule
+      tags: [lakers]
+      summary: Get Lakers schedule
+      description: Returns upcoming and recent Lakers games
+      responses:
+        "200":
+          description: Lakers schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResponse"
+
+  /lakers/live:
+    get:
+      operationId: getLakersLive
+      tags: [lakers]
+      summary: Get live game data
+      description: Returns live score and game data if a game is in progress
+      responses:
+        "200":
+          description: Live game data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveGameResponse"
+
+  /lakers/roster:
+    get:
+      operationId: getLakersRoster
+      tags: [lakers]
+      summary: Get Lakers roster
+      description: Returns full Lakers roster with player stats and info
+      responses:
+        "200":
+          description: Lakers roster
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RosterResponse"
+
+  /lakers/news:
+    get:
+      operationId: getLakersNews
+      tags: [lakers]
+      summary: Get Lakers news
+      description: Returns latest Lakers news articles
+      responses:
+        "200":
+          description: Lakers news
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsResponse"
+
+  /lakers/injuries:
+    get:
+      operationId: getLakersInjuries
+      tags: [lakers]
+      summary: Get Lakers injury report
+      description: Returns current injury and availability status for all players
+      responses:
+        "200":
+          description: Injury report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InjuryResponse"
+
+  /lakers/standings:
+    get:
+      operationId: getNbaStandings
+      tags: [lakers]
+      summary: Get NBA Western Conference standings
+      description: Returns current NBA standings for context
+      responses:
+        "200":
+          description: NBA standings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandingsResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +121,357 @@ components:
       required:
         - status
 
+    Game:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+        time:
+          type: string
+        homeTeam:
+          type: string
+        awayTeam:
+          type: string
+        homeScore:
+          type: integer
+          nullable: true
+        awayScore:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        venue:
+          type: string
+        isLakers:
+          type: boolean
+        lakersIsHome:
+          type: boolean
+        opponent:
+          type: string
+        opponentLogo:
+          type: string
+        result:
+          type: string
+          nullable: true
+      required:
+        - id
+        - date
+        - time
+        - homeTeam
+        - awayTeam
+        - status
+        - venue
+        - isLakers
+        - lakersIsHome
+        - opponent
+        - opponentLogo
+
+    ScheduleResponse:
+      type: object
+      properties:
+        games:
+          type: array
+          items:
+            $ref: "#/components/schemas/Game"
+        season:
+          type: string
+      required:
+        - games
+        - season
+
+    LiveGameResponse:
+      type: object
+      properties:
+        isLive:
+          type: boolean
+        game:
+          $ref: "#/components/schemas/LiveGame"
+          nullable: true
+        streamUrl:
+          type: string
+          nullable: true
+      required:
+        - isLive
+
+    LiveGame:
+      type: object
+      properties:
+        id:
+          type: string
+        period:
+          type: integer
+        clock:
+          type: string
+        lakersScore:
+          type: integer
+        opponentScore:
+          type: integer
+        opponent:
+          type: string
+        opponentLogo:
+          type: string
+        lakersIsHome:
+          type: boolean
+        status:
+          type: string
+        leaders:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlayerStat"
+      required:
+        - id
+        - period
+        - clock
+        - lakersScore
+        - opponentScore
+        - opponent
+        - opponentLogo
+        - lakersIsHome
+        - status
+        - leaders
+
+    PlayerStat:
+      type: object
+      properties:
+        playerId:
+          type: string
+        name:
+          type: string
+        points:
+          type: integer
+        rebounds:
+          type: integer
+        assists:
+          type: integer
+        photoUrl:
+          type: string
+      required:
+        - playerId
+        - name
+        - points
+        - rebounds
+        - assists
+        - photoUrl
+
+    Player:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        number:
+          type: string
+        position:
+          type: string
+        height:
+          type: string
+        weight:
+          type: string
+        age:
+          type: integer
+          nullable: true
+        college:
+          type: string
+          nullable: true
+        experience:
+          type: string
+        photoUrl:
+          type: string
+        stats:
+          $ref: "#/components/schemas/SeasonStats"
+        status:
+          type: string
+        injuryNote:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+        - number
+        - position
+        - height
+        - weight
+        - experience
+        - photoUrl
+        - stats
+        - status
+
+    SeasonStats:
+      type: object
+      properties:
+        ppg:
+          type: number
+        rpg:
+          type: number
+        apg:
+          type: number
+        spg:
+          type: number
+        bpg:
+          type: number
+        fgPct:
+          type: number
+        fg3Pct:
+          type: number
+        ftPct:
+          type: number
+        gamesPlayed:
+          type: integer
+        minutesPerGame:
+          type: number
+      required:
+        - ppg
+        - rpg
+        - apg
+        - spg
+        - bpg
+        - fgPct
+        - fg3Pct
+        - ftPct
+        - gamesPlayed
+        - minutesPerGame
+
+    RosterResponse:
+      type: object
+      properties:
+        players:
+          type: array
+          items:
+            $ref: "#/components/schemas/Player"
+        teamRecord:
+          type: string
+        teamRank:
+          type: string
+      required:
+        - players
+        - teamRecord
+        - teamRank
+
+    NewsArticle:
+      type: object
+      properties:
+        id:
+          type: string
+        headline:
+          type: string
+        description:
+          type: string
+        publishedAt:
+          type: string
+        source:
+          type: string
+        url:
+          type: string
+        imageUrl:
+          type: string
+          nullable: true
+        category:
+          type: string
+      required:
+        - id
+        - headline
+        - description
+        - publishedAt
+        - source
+        - url
+        - category
+
+    NewsResponse:
+      type: object
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewsArticle"
+      required:
+        - articles
+
+    InjuryEntry:
+      type: object
+      properties:
+        playerId:
+          type: string
+        playerName:
+          type: string
+        number:
+          type: string
+        position:
+          type: string
+        status:
+          type: string
+        injuryType:
+          type: string
+          nullable: true
+        returnDate:
+          type: string
+          nullable: true
+        photoUrl:
+          type: string
+      required:
+        - playerId
+        - playerName
+        - number
+        - position
+        - status
+        - photoUrl
+
+    InjuryResponse:
+      type: object
+      properties:
+        injuries:
+          type: array
+          items:
+            $ref: "#/components/schemas/InjuryEntry"
+        lastUpdated:
+          type: string
+      required:
+        - injuries
+        - lastUpdated
+
+    StandingEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        teamName:
+          type: string
+        teamAbbr:
+          type: string
+        wins:
+          type: integer
+        losses:
+          type: integer
+        winPct:
+          type: number
+        gamesBehind:
+          type: string
+        isLakers:
+          type: boolean
+        logo:
+          type: string
+      required:
+        - rank
+        - teamName
+        - teamAbbr
+        - wins
+        - losses
+        - winPct
+        - gamesBehind
+        - isLakers
+        - logo
+
+    StandingsResponse:
+      type: object
+      properties:
+        standings:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandingEntry"
+        conference:
+          type: string
+      required:
+        - standings
+        - conference
